@@ -1,0 +1,29 @@
+/* Мобильные адаптации */
+.hud {
+  font-weight: 800;
+  font-size: 14px;
+  padding: 6px 8px;
+}
+
+.hint {
+  font-size: 13px;
+  line-height: 1.25;
+  padding: 6px 8px;
+}
+
+.btn {
+  font-size: 15px;
+  padding: 10px 16px;
+}
+
+/* Уменьшить тень/радиус у canvas на маленьких экранах */
+canvas {
+  border-radius: 10px;
+  box-shadow: 0 6px 22px rgba(0,0,0,.15);
+}
+
+/* Плотнее карточка итогов */
+.summary .card {
+  padding: 18px;
+  border-radius: 14px;
+}

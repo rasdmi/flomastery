@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Раймон — драконий рыцарь</title>
+  <link rel="stylesheet" href="styles.css">
+  <!-- Мобильные правки отдельным файлом -->
+  <link rel="stylesheet" href="mobile.css" media="(max-width: 768px)">
+</head>
+<body>
+  <div class="hud">
+    ⚔️ <span data-i="kills-label">Побед</span>:
+    <span id="score">0</span>
+    • 🔖 <span data-i="checkpoint-label">Чекпоинт</span>:
+    <span id="cp">—</span>
+  </div>
+
+  <div class="hint" id="hint"></div>
+
+  <div id="wrap">
+    <canvas id="game" width="1024" height="576"></canvas>
+  </div>
+
+  <div id="summary" class="summary hidden" role="dialog" aria-modal="true">
+    <div class="card">
+      <h2 id="summaryTitle">Конец раунда</h2>
+      <p id="sumText"></p>
+      <div style="text-align:center;margin-top:12px">
+        <button id="restart" class="btn">🔄 Играть снова</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Сначала контент/настройки, затем логика -->
+  <script src="content.js"></script>
+  <script src="script.js"></script>
+</body>
+</html>
