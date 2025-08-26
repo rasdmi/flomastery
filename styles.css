@@ -1,7 +1,6 @@
-/* Базовые стили */
 html, body { height: 100%; margin: 0; }
 body {
-  background: #eff1f3;
+  background: #f3f5f8;
   font-family: system-ui, Segoe UI, Roboto, Manrope, sans-serif;
   color: #101214;
 }
@@ -14,9 +13,9 @@ body {
 }
 
 canvas {
-  background: #dfe6ea;
+  background: #ffffff;
   box-shadow: 0 8px 30px rgba(0,0,0,.15);
-  border-radius: 14px;
+  border-radius: 16px;
   max-width: 100%;
   height: auto;
   touch-action: none;
@@ -26,7 +25,7 @@ canvas {
   position: fixed;
   left: 10px;
   top: 10px;
-  background: rgba(255,255,255,.9);
+  background: rgba(255,255,255,.92);
   padding: 6px 10px;
   border-radius: 10px;
   font-weight: 800;
@@ -37,12 +36,12 @@ canvas {
   position: fixed;
   left: 10px;
   bottom: 10px;
-  background: rgba(255,255,255,.9);
+  background: rgba(255,255,255,.92);
   padding: 6px 10px;
   border-radius: 10px;
   font-weight: 600;
   z-index: 2;
-  max-width: min(92vw, 800px);
+  max-width: min(92vw, 820px);
 }
 
 .summary {
@@ -74,17 +73,9 @@ canvas {
   border: none;
   border-radius: 10px;
   cursor: pointer;
-  background: #ff6b35;
+  background: #3b82f6;
   color: #fff;
   box-shadow: 0 4px 10px rgba(0,0,0,.2);
 }
 
 .hidden { display: none; }
-
-/* Вспомогательные классы (если пригодятся) */
-.visually-hidden {
-  position: absolute !important;
-  height: 1px; width: 1px;
-  overflow: hidden; clip: rect(1px, 1px, 1px, 1px);
-  white-space: nowrap; border: 0; padding: 0; margin: -1px;
-}
