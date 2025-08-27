@@ -3,6 +3,7 @@
   const c = document.getElementById('game');
   const ctx = c.getContext('2d');
   const levelTitle = document.getElementById('levelTitle');
+  const dogSpdLabel = document.getElementById('dogSpdLabel');
   const timerEl = document.getElementById('timer');
   const hintEl = document.getElementById('hint');
   const sumEl = document.getElementById('summary');
@@ -12,6 +13,16 @@
   const navEl = document.getElementById('nav');
   const openNavBtn = document.getElementById('openNav');
   const closeNavBtn = document.getElementById('closeNav');
+
+  // mobile buttons
+  const btnUp = document.getElementById('btnUp');
+  const btnDown = document.getElementById('btnDown');
+  const btnLeft = document.getElementById('btnLeft');
+  const btnRight = document.getElementById('btnRight');
+  const btnJump = document.getElementById('btnJump');
+  const spd1 = document.getElementById('spd1');
+  const spd2 = document.getElementById('spd2');
+  const spd3 = document.getElementById('spd3');
 
   const T = window.TEXT || {};
   const CFG = window.CONFIG || {};
@@ -37,7 +48,7 @@
 
   const JUMP_CD = CFG.jumpCooldownMs ?? 900;
 
-  const DOG_SPEED = CFG.dogSpeed ?? 2.8;
+  const DOG_SPEEDS = CFG.dogSpeeds ?? [2.0, 2.8, 3.8];
   const DOG_RECALC_MS = CFG.dogRecalcMs ?? 260;
 
   // ---------- Состояние ----------
@@ -45,6 +56,10 @@
   let running = true;
   let startTime = performance.now();
   let caught = false;
+
+  // мир/камера
+  let WORLD_W = c.width, WORLD_H = c.height;
+  let camX = 0, camY = 0;
 
   // сетка-лабиринт
   let maze = null;   // {walls,w,h,cell}
@@ -56,9 +71,9 @@
   let jumpReadyAt = 0;
 
   // собака
-  const dog = { x: 0, y: 0, r: 10, path: [], next: 1, recalcAt: 0 };
+  const dog = { x: 0, y: 0, r: 10, path: [], next: 1, recalcAt: 0, speed: DOG_SPEEDS[1], tier: 2 };
 
-  // стрелки-навигация
+  // стрелки
   let arrows = [];
   let navRecalcAt = 0;
 
@@ -70,6 +85,9 @@
     if(e.code==='ArrowLeft'||e.code==='KeyA') keys.left=true;
     if(e.code==='ArrowRight'||e.code==='KeyD') keys.right=true;
     if(e.code==='Space') tryJump();
+    if(e.code==='Digit1') setDogTier(1);
+    if(e.code==='Digit2') setDogTier(2);
+    if(e.code==='Digit3') setDogTier(3);
     if(e.code==='KeyR') startLevel(level, true);
     if(e.code==='KeyM') startLevel(1, true);
     if(e.key==='?' || e.code==='Slash') openNav();
@@ -80,12 +98,38 @@
     if(e.code==='ArrowLeft'||e.code==='KeyA') keys.left=false;
     if(e.code==='ArrowRight'||e.code==='KeyD') keys.right=false;
   });
+  restartBtn.addEventListener('click', ()=>startLevel(1, true));
 
-  openNavBtn.addEventListener('click', openNav);
   function openNav(){ navEl.classList.remove('hidden'); }
+  openNavBtn.addEventListener('click', openNav);
   if (closeNavBtn) closeNavBtn.addEventListener('click', ()=>navEl.classList.add('hidden'));
 
-  restartBtn.addEventListener('click', ()=>startLevel(1, true));
+  // touch controls
+  function hold(btn, on, off){
+    if(!btn) return;
+    const down = (e)=>{ e.preventDefault(); on(); btn.classList.add('active'); };
+    const up = (e)=>{ e.preventDefault(); off(); btn.classList.remove('active'); };
+    btn.addEventListener('pointerdown', down);
+    btn.addEventListener('pointerup', up);
+    btn.addEventListener('pointerleave', up);
+    btn.addEventListener('pointercancel', up);
+  }
+  hold(btnUp, ()=>keys.up=true, ()=>keys.up=false);
+  hold(btnDown, ()=>keys.down=true, ()=>keys.down=false);
+  hold(btnLeft, ()=>keys.left=true, ()=>keys.left=false);
+  hold(btnRight, ()=>keys.right=true, ()=>keys.right=false);
+  if(btnJump) btnJump.addEventListener('pointerdown', (e)=>{ e.preventDefault(); tryJump(); });
+
+  function setDogTier(tier){
+    dog.tier = tier;
+    dog.speed = DOG_SPEEDS[tier-1] ?? DOG_SPEEDS[1];
+    dogSpdLabel.textContent = String(tier);
+    [spd1,spd2,spd3].forEach((b,i)=> b && b.classList.toggle('active', i===tier-1));
+  }
+  if(spd1) spd1.addEventListener('click', ()=>setDogTier(1));
+  if(spd2) spd2.addEventListener('click', ()=>setDogTier(2));
+  if(spd3) spd3.addEventListener('click', ()=>setDogTier(3));
+  setDogTier(2);
 
   // ---------- Утилиты ----------
   const clamp = (v,a,b)=> Math.max(a, Math.min(b, v));
@@ -94,12 +138,14 @@
   const toWorld = (cx,cy)=> ({ x: cx*cellSize(), y: cy*cellSize() });
   const toCellIdx = (x,y)=> ({ x: clamp(Math.floor(x/cellSize()), 0, maze.w-1),
                                y: clamp(Math.floor(y/cellSize()), 0, maze.h-1) });
-
-  // клетки-«комнаты» на нечётных координатах
   function snapToRoom(idx){
     const x = (idx.x%2 ? idx.x : clamp(idx.x-1, 1, maze.w-2));
     const y = (idx.y%2 ? idx.y : clamp(idx.y-1, 1, maze.h-2));
     return {x,y};
+  }
+  function updateCamera(){
+    camX = clamp(player.x - c.width/2, 0, Math.max(0, WORLD_W - c.width));
+    camY = clamp(player.y - c.height/2, 0, Math.max(0, WORLD_H - c.height));
   }
 
   // ---------- Генерация ----------
@@ -121,7 +167,6 @@
     return {walls, w, h, cell: cellSize()};
   }
 
-  // кратчайший путь между двумя «клетками» (odd, odd)
   function pathCells(from, to){
     const key = (x,y)=> `${x},${y}`;
     const prev = new Map();
@@ -151,7 +196,9 @@
     out.reverse(); return out;
   }
 
-  // ---------- Навигация (стрелки) ----------
+  // ---------- Навигация ----------
+  let arrows = [];
+  let navRecalcAt = 0;
   function buildArrowsFromPlayer(){
     const pRoom = snapToRoom(toCellIdx(player.x, player.y));
     const route = pathCells(pRoom, exitCell);
@@ -174,7 +221,7 @@
   }
   function drawArrow(ar){
     if(ar.alpha <= 0.02) return;
-    ctx.save(); ctx.globalAlpha = ar.alpha; ctx.translate(ar.x, ar.y); ctx.rotate(ar.ang);
+    ctx.save(); ctx.globalAlpha = ar.alpha; ctx.translate(ar.x - camX, ar.y - camY); ctx.rotate(ar.ang);
     const w = 26, h = 16;
     ctx.fillStyle='rgba(0,0,0,.18)'; ctx.beginPath(); ctx.ellipse(-2, h*0.6, w*0.6, 4, 0, 0, Math.PI*2); ctx.fill();
     const grad = ctx.createLinearGradient(0,-h,0,h);
@@ -201,40 +248,36 @@
     if(target){
       const w = toWorld(target.x+0.5, target.y+0.5);
       const ang = Math.atan2(w.y - dog.y, w.x - dog.x);
-      dog.x += Math.cos(ang) * DOG_SPEED;
-      dog.y += Math.sin(ang) * DOG_SPEED;
+      dog.x += Math.cos(ang) * dog.speed;
+      dog.y += Math.sin(ang) * dog.speed;
       if(dist(dog.x, dog.y, w.x, w.y) < 3) dog.next++;
     }
-    // поймал?
     if(dist(dog.x, dog.y, player.x, player.y) < (dog.r + player.r)){
       caught = true; finish();
     }
   }
   function drawDog(){
+    const drawX = dog.x - camX, drawY = dog.y - camY;
     ctx.fillStyle='rgba(0,0,0,.15)';
-    ctx.beginPath(); ctx.ellipse(dog.x, dog.y+8, 12, 4, 0, 0, Math.PI*2); ctx.fill();
-    const g = ctx.createRadialGradient(dog.x-6, dog.y-6, 4, dog.x, dog.y, 22);
+    ctx.beginPath(); ctx.ellipse(drawX, drawY+8, 12, 4, 0, 0, Math.PI*2); ctx.fill();
+    const g = ctx.createRadialGradient(drawX-6, drawY-6, 4, drawX, drawY, 22);
     g.addColorStop(0,'#ffe1b7'); g.addColorStop(1,'#d6923a');
-    ctx.fillStyle=g; ctx.beginPath(); ctx.ellipse(dog.x, dog.y, 14, 12, 0, 0, Math.PI*2); ctx.fill();
-    // ушки
+    ctx.fillStyle=g; ctx.beginPath(); ctx.ellipse(drawX, drawY, 14, 12, 0, 0, Math.PI*2); ctx.fill();
     ctx.fillStyle='#8b5e20';
-    ctx.beginPath(); ctx.moveTo(dog.x-10, dog.y-6); ctx.lineTo(dog.x-2, dog.y-10); ctx.lineTo(dog.x-4, dog.y-2); ctx.closePath(); ctx.fill();
-    ctx.beginPath(); ctx.moveTo(dog.x+10, dog.y-6); ctx.lineTo(dog.x+2, dog.y-10); ctx.lineTo(dog.x+4, dog.y-2); ctx.closePath(); ctx.fill();
-    // глаз/нос
-    ctx.fillStyle='#111'; ctx.beginPath(); ctx.arc(dog.x+3, dog.y-2, 2, 0, Math.PI*2); ctx.fill();
-    ctx.beginPath(); ctx.arc(dog.x+6, dog.y+2, 2, 0, Math.PI*2); ctx.fill();
-    // хвост
+    ctx.beginPath(); ctx.moveTo(drawX-10, drawY-6); ctx.lineTo(drawX-2, drawY-10); ctx.lineTo(drawX-4, drawY-2); ctx.closePath(); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(drawX+10, drawY-6); ctx.lineTo(drawX+2, drawY-10); ctx.lineTo(drawX+4, drawY-2); ctx.closePath(); ctx.fill();
+    ctx.fillStyle='#111'; ctx.beginPath(); ctx.arc(drawX+3, drawY-2, 2, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(drawX+6, drawY+2, 2, 0, Math.PI*2); ctx.fill();
     ctx.strokeStyle='#8b5e20'; ctx.lineWidth=3;
-    ctx.beginPath(); ctx.moveTo(dog.x-12, dog.y+2); ctx.quadraticCurveTo(dog.x-20, dog.y, dog.x-16, dog.y+10); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(drawX-12, drawY+2); ctx.quadraticCurveTo(drawX-20, drawY, drawX-16, drawY+10); ctx.stroke();
   }
 
-  // ---------- Прыжок через стену ----------
+  // ---------- Прыжок ----------
   function tryJump(){
     if(!maze) return;
     const now = performance.now();
     if(now < jumpReadyAt) return;
 
-    // направление по нажатым клавишам либо последний
     let dx = (keys.right?1:0) - (keys.left?1:0);
     let dy = (keys.down?1:0) - (keys.up?1:0);
     if(Math.abs(dx)+Math.abs(dy)===0){ dx = lastDir.x; dy = lastDir.y; }
@@ -249,11 +292,9 @@
       const tx = p.x + d.x*2, ty = p.y + d.y*2;
       if(tx<=0||ty<=0||tx>=maze.w-1||ty>=maze.h-1) continue;
       if(maze.walls[wy][wx]===1 && maze.walls[ty][tx]===0){
-        // прыжок: переносим в центр целевой «комнаты»
         const w = toWorld(tx+0.5, ty+0.5);
         player.x = w.x; player.y = w.y;
         jumpReadyAt = now + JUMP_CD;
-        // небольшой всплеск
         flashAt(player.x, player.y);
         return;
       }
@@ -272,7 +313,7 @@
       const a = Math.max(0, Math.min(1, f.life/320));
       ctx.save(); ctx.globalAlpha = a;
       ctx.strokeStyle='#22d3ee'; ctx.lineWidth=3;
-      ctx.beginPath(); ctx.arc(f.x, f.y, 18*(1-a)+6, 0, Math.PI*2); ctx.stroke();
+      ctx.beginPath(); ctx.arc(f.x - camX, f.y - camY, 18*(1-a)+6, 0, Math.PI*2); ctx.stroke();
       ctx.restore();
     }
   }
@@ -291,16 +332,31 @@
         if(cy<0||cx<0||cy>=maze.h||cx>=maze.w) continue;
         if(maze.walls[cy][cx]===1){
           const wx = cx*cell, wy = cy*cell, ww = cell, wh = cell;
-          const nx = clamp(x, wx, wx+ww), ny = clamp(y, wy, wy+wh);
-          const dd = Math.hypot(x-nx, y-ny);
-          if(dd < r){
-            const ang = Math.atan2(y-ny, x-nx) || 0;
-            x = nx + Math.cos(ang) * (r + 0.1);
-            y = ny + Math.sin(ang) * (r + 0.1);
-          }
+          const nx = clamp(x, wx, wx+ww), ny = clamp(y, wy, wy+rh(wh=cell));
+          // small helper to avoid style error
         }
       }
     }
+    // re-implement cleanly (avoid above mistake)
+    x = px; y = py;
+    for(let cy=minY; cy<=maxY; cy++){
+      for(let cx=minX; cx<=maxX; cx++){
+        if(cy<0||cx<0||cy>=maze.h||cx>=maze.w) continue;
+        if(maze.walls[cy][cx]!==1) continue;
+        const rx = cx*cell, ry = cy*cell, rw = cell, rh = cell;
+        const cxn = clamp(x, rx, rx+rw);
+        const cyn = clamp(y, ry, ry+rh);
+        const dd = Math.hypot(x-cxn, y-cyn);
+        if(dd < r){
+          const ang = Math.atan2(y - cyn, x - cxn) || 0;
+          x = cxn + Math.cos(ang) * (r + 0.1);
+          y = cyn + Math.sin(ang) * (r + 0.1);
+        }
+      }
+    }
+    // края мира
+    x = clamp(x, r, WORLD_W - r);
+    y = clamp(y, r, WORLD_H - r);
     return {x,y};
   }
 
@@ -311,26 +367,28 @@
     if(hard) startTime = performance.now();
     caught = false;
 
-    // размеры увеличиваются ×1.4^(level-1) и приводятся к нечётным
+    // размеры увеличиваются ×1.4^(level-1)
     const cols = Math.max(5, Math.round(BASE_COLS * Math.pow(SCALE, level-1)));
     const rows = Math.max(5, Math.round(BASE_ROWS * Math.pow(SCALE, level-1)));
     maze = genMaze(cols, rows);
 
+    WORLD_W = maze.w * maze.cell;
+    WORLD_H = maze.h * maze.cell;
+
     // старт/финиш
-    player.x = TILE*1.5; player.y = TILE*1.5;
+    player.x = maze.cell * 1.5; player.y = maze.cell * 1.5;
 
     exitCell = { x: maze.w-2, y: maze.h-2 };
-
-    // собака встаёт на «другой конец»
     const ex = toWorld(exitCell.x+0.5, exitCell.y+0.5);
     dog.x = ex.x; dog.y = ex.y; dog.recalcAt = 0;
 
     // навигация
     arrows.length = 0; navRecalcAt = 0;
 
-    // спрячем сводку
     sumEl.classList.add('hidden');
     running = true;
+
+    updateCamera();
   }
 
   // ---------- Обновление ----------
@@ -339,7 +397,6 @@
     const dt = Math.min(33, t-last); last=t;
     if(!running) return;
 
-    // направление для прыжка
     let dx = (keys.right?1:0) - (keys.left?1:0);
     let dy = (keys.down?1:0) - (keys.up?1:0);
     if(Math.abs(dx)+Math.abs(dy) > 0){
@@ -347,7 +404,7 @@
       else { lastDir.x = 0; lastDir.y = Math.sign(dy); }
     }
 
-    // движение игрока
+    // движение игрока в мире
     const len = Math.hypot(dx,dy) || 1;
     player.vx = (dx/len) * SPEED;
     player.vy = (dy/len) * SPEED;
@@ -355,13 +412,12 @@
     let nx = player.x + player.vx;
     let ny = player.y + player.vy;
     const after = collideMaze(nx, ny, player.r);
-    player.x = clamp(after.x, player.r, c.width - player.r);
-    player.y = clamp(after.y, player.r, c.height - player.r);
+    player.x = after.x; player.y = after.y;
 
     // собака
     updateDog(dt);
 
-    // пересчёт навигации
+    // навигация
     if(performance.now() >= navRecalcAt){
       buildArrowsFromPlayer();
       navRecalcAt = performance.now() + NAV_RECALC_MS;
@@ -370,13 +426,13 @@
 
     updateFlashes(dt);
 
-    // финиш
+    // финиш → следующий уровень
     const ex = toWorld(exitCell.x+0.5, exitCell.y+0.5);
     if(dist(player.x, player.y, ex.x, ex.y) < TILE*0.6){
-      startLevel(level+1); // следующий — станет больше ×1.4
+      startLevel(level+1);
     }
 
-    // таймер
+    updateCamera();
     timerEl.textContent = ((t - startTime)/1000).toFixed(1);
   }
 
@@ -384,52 +440,52 @@
   function render(){
     ctx.clearRect(0,0,c.width,c.height);
 
-    // мягкий фон
+    // фон
     const sky = ctx.createLinearGradient(0,0,0,c.height);
     sky.addColorStop(0,'#eaf3ff'); sky.addColorStop(1,'#eef6ff');
     ctx.fillStyle=sky; ctx.fillRect(0,0,c.width,c.height);
 
     drawMaze();
 
-    // выходной маркер
+    // выходной маркер (в мировых координатах)
     const ex = toWorld(exitCell.x, exitCell.y);
     ctx.fillStyle='#6ee7b7';
-    ctx.fillRect(ex.x+4, ex.y+4, TILE-8, TILE-8);
+    ctx.fillRect(ex.x - camX + 4, ex.y - camY + 4, TILE-8, TILE-8);
 
     for(const a of arrows) drawArrow(a);
 
-    // собака и игрок
     drawDog();
     drawPlayer();
-
     drawFlashes();
-
-    // рамка
-    ctx.strokeStyle='rgba(0,0,0,.08)'; ctx.lineWidth=2;
-    ctx.strokeRect(8,8,c.width-16,c.height-16);
   }
 
   function drawMaze(){
     const m = maze, cell = m.cell;
-    ctx.save();
-    for(let y=0;y<m.h;y++){
-      for(let x=0;x<m.w;x++){
+
+    // рисуем только видимую область
+    const sx = Math.max(0, Math.floor(camX / cell) - 1);
+    const sy = Math.max(0, Math.floor(camY / cell) - 1);
+    const ex = Math.min(m.w-1, Math.ceil((camX + c.width) / cell) + 1);
+    const ey = Math.min(m.h-1, Math.ceil((camY + c.height) / cell) + 1);
+
+    for(let y=sy;y<=ey;y++){
+      for(let x=sx;x<=ex;x++){
         if(m.walls[y][x]===1){
-          const px = x*cell, py = y*cell;
+          const px = x*cell - camX, py = y*cell - camY;
           ctx.fillStyle='#eae7ff'; ctx.fillRect(px,py,cell,cell);
           ctx.strokeStyle='#6b5bd6'; ctx.lineWidth=2; ctx.strokeRect(px+0.5,py+0.5,cell-1,cell-1);
         }
       }
     }
-    ctx.restore();
   }
 
   function drawPlayer(){
+    const drawX = player.x - camX, drawY = player.y - camY;
     ctx.fillStyle='rgba(0,0,0,.15)';
-    ctx.beginPath(); ctx.ellipse(player.x, player.y+10, 12, 4, 0, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(drawX, drawY+10, 12, 4, 0, 0, Math.PI*2); ctx.fill();
     ctx.lineWidth = 3; ctx.strokeStyle = '#4338ca'; ctx.fillStyle = '#a5b4fc';
-    ctx.beginPath(); ctx.ellipse(player.x, player.y, 12, 14, 0, 0, Math.PI*2); ctx.fill(); ctx.stroke();
-    ctx.fillStyle='#0b1020'; ctx.beginPath(); ctx.arc(player.x+3, player.y-2, 2, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(drawX, drawY, 12, 14, 0, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+    ctx.fillStyle='#0b1020'; ctx.beginPath(); ctx.arc(drawX+3, drawY-2, 2, 0, Math.PI*2); ctx.fill();
   }
 
   // ---------- Финиш ----------
@@ -441,6 +497,7 @@
   }
 
   // ---------- Цикл ----------
+  let last = performance.now();
   function loop(t){
     update(t);
     render();

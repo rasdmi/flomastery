@@ -2,14 +2,16 @@
 <html lang="ru">
 <head>
   <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
   <title>Лабиринт: уровни и собака</title>
   <link rel="stylesheet" href="styles.css">
-  <link rel="stylesheet" href="mobile.css" media="(max-width: 768px)">
+  <link rel="stylesheet" href="mobile.css" media="(max-width: 900px)">
 </head>
 <body>
   <div class="hud">
     <b id="levelTitle">Уровень 1</b> • ⏱ <span id="timer">0.0</span>s
+    <span class="sep">•</span>
+    🐶 скорость: <span id="dogSpdLabel">2</span>
     <button id="openNav" class="iconbtn" title="Навигация (или нажми ?)">ℹ️</button>
   </div>
 
@@ -35,13 +37,34 @@
       <h3>Навигация и правила</h3>
       <ul>
         <li>🎯 Дойди до выхода. Каждый следующий уровень больше на <b>×1.4</b>.</li>
-        <li>🐶 Собака стартует с другого конца и бежит по кратчайшему пути. Если поймает — уровень начнётся заново.</li>
-        <li>⬆️ Стрелки в лабиринте показывают кратчайший путь до выхода.</li>
-        <li>␣ Пробел — <b>перепрыгнуть</b> ближайшую стену по направлению движения (кулдаун).</li>
+        <li>🐶 Собака стартует с другого конца и преследует тебя. Скорость переключается на клавиши <b>1 / 2 / 3</b> или кнопки на экране.</li>
+        <li>⬆️ Синие стрелки показывают кратчайший путь к выходу.</li>
+        <li>␣ Пробел — <b>перепрыгнуть</b> ближайшую стену по направлению движения (есть кулдаун).</li>
         <li>WASD/стрелки — движение • R — рестарт уровня • M — полный рестарт • ? — открыть это окно</li>
+        <li>📱 На телефоне используй кнопки управления внизу.</li>
       </ul>
       <div style="text-align:center;margin-top:10px">
         <button id="closeNav" class="btn">Понятно</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 📱 Мобильные кнопки -->
+  <div class="controls" id="controls">
+    <div class="dpad">
+      <button class="ctl sm" id="btnUp">↑</button>
+      <div class="row">
+        <button class="ctl sm" id="btnLeft">←</button>
+        <button class="ctl sm" id="btnDown">↓</button>
+        <button class="ctl sm" id="btnRight">→</button>
+      </div>
+    </div>
+    <div class="actions">
+      <button class="ctl big" id="btnJump">␣ Прыжок</button>
+      <div class="speeds">
+        <button class="pill" id="spd1">🐶1</button>
+        <button class="pill" id="spd2">🐶2</button>
+        <button class="pill" id="spd3">🐶3</button>
       </div>
     </div>
   </div>
