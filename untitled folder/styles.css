@@ -29,20 +29,7 @@ canvas {
   padding: 6px 10px;
   border-radius: 10px;
   font-weight: 800;
-  z-index: 3;
-  display:flex;
-  gap:8px;
-  align-items:center;
-}
-
-.iconbtn {
-  margin-left:6px;
-  border:none;
-  background: #e6efff;
-  border-radius: 8px;
-  padding: 4px 8px;
-  font-size: 14px;
-  cursor: pointer;
+  z-index: 2;
 }
 
 .hint {
@@ -65,7 +52,7 @@ canvas {
   align-items: center;
   justify-content: center;
   padding: 20px;
-  z-index: 5;
+  z-index: 3;
 }
 
 .summary .card {
@@ -90,26 +77,5 @@ canvas {
   color: #fff;
   box-shadow: 0 4px 10px rgba(0,0,0,.2);
 }
-
-.nav {
-  position: fixed;
-  inset: 0;
-  background: rgba(0,0,0,.4);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 24px;
-  z-index: 4;
-}
-.nav .card {
-  background: #ffffff;
-  max-width: 620px;
-  width: 100%;
-  border-radius: 16px;
-  box-shadow: 0 20px 80px rgba(0,0,0,.25);
-  padding: 18px 20px;
-}
-.nav h3 { margin: 0 0 8px 0; }
-.nav ul { margin: 0; padding-left: 18px; line-height: 1.45; }
 
 .hidden { display: none; }

@@ -3,13 +3,14 @@
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>Лабиринт: Голубь</title>
+  <title>Лабиринт: уровни и собака</title>
   <link rel="stylesheet" href="styles.css">
   <link rel="stylesheet" href="mobile.css" media="(max-width: 768px)">
 </head>
 <body>
   <div class="hud">
-    <b id="levelTitle">Дом</b> • ⏱ <span id="timer">0.0</span>s
+    <b id="levelTitle">Уровень 1</b> • ⏱ <span id="timer">0.0</span>s
+    <button id="openNav" class="iconbtn" title="Навигация (или нажми ?)">ℹ️</button>
   </div>
 
   <div class="hint" id="hint"></div>
@@ -20,10 +21,27 @@
 
   <div id="summary" class="summary hidden" role="dialog" aria-modal="true">
     <div class="card">
-      <h2 id="summaryTitle">Ты в желудке голубя 😅</h2>
+      <h2 id="summaryTitle">Финиш!</h2>
       <p id="sumText"></p>
       <div style="text-align:center;margin-top:12px">
         <button id="restart" class="btn">🔄 С начала</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Всплывающее окно навигации -->
+  <div id="nav" class="nav hidden" role="dialog" aria-modal="true">
+    <div class="card">
+      <h3>Навигация и правила</h3>
+      <ul>
+        <li>🎯 Дойди до выхода. Каждый следующий уровень больше на <b>×1.4</b>.</li>
+        <li>🐶 Собака стартует с другого конца и бежит по кратчайшему пути. Если поймает — уровень начнётся заново.</li>
+        <li>⬆️ Стрелки в лабиринте показывают кратчайший путь до выхода.</li>
+        <li>␣ Пробел — <b>перепрыгнуть</b> ближайшую стену по направлению движения (кулдаун).</li>
+        <li>WASD/стрелки — движение • R — рестарт уровня • M — полный рестарт • ? — открыть это окно</li>
+      </ul>
+      <div style="text-align:center;margin-top:10px">
+        <button id="closeNav" class="btn">Понятно</button>
       </div>
     </div>
   </div>
