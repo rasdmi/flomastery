@@ -1,14 +1,14 @@
-/* включаем мобильные кнопки на узких экранах */
-.controls { display: flex; }
+/* В мобильной вёрстке показываем панель всегда */
+.controls { display:flex; }
 
 .dpad { display:flex; flex-direction:column; gap:8px; }
 .dpad .row { display:flex; gap:8px; justify-content:center; }
 
 .actions { display:flex; flex-direction:column; align-items:flex-end; gap:8px; }
 
-.hud { font-size: 14px; padding: 6px 8px; }
-.hint { font-size: 13px; line-height: 1.25; padding: 6px 8px; }
-canvas { border-radius: 12px; box-shadow: 0 6px 22px rgba(0,0,0,.15); }
-.summary .card { padding: 18px; border-radius: 14px; }
-.btn { font-size: 15px; padding: 10px 16px; }
-.nav .card { padding: 16px; }
+.hud { font-size:14px; padding:6px 8px; }
+.hint { font-size:13px; line-height:1.25; padding:6px 8px; }
+canvas { border-radius:12px; box-shadow:0 6px 22px rgba(0,0,0,.15); }
+.summary .card{ padding:18px; border-radius:14px; }
+.btn{ font-size:15px; padding:10px 16px; }
+.nav .card{ padding:16px; }

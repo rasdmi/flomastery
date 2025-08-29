@@ -13,6 +13,7 @@
   const navEl = document.getElementById('nav');
   const openNavBtn = document.getElementById('openNav');
   const closeNavBtn = document.getElementById('closeNav');
+  const toggleArrowsBtn = document.getElementById('toggleArrows');
 
   // mobile buttons
   const btnUp = document.getElementById('btnUp');
@@ -23,10 +24,16 @@
   const spd1 = document.getElementById('spd1');
   const spd2 = document.getElementById('spd2');
   const spd3 = document.getElementById('spd3');
+  const btnInfo = document.getElementById('btnInfo');
+  const btnCompass = document.getElementById('btnCompass');
+  const btnRestart = document.getElementById('btnRestart');
+
+  if ('ontouchstart' in window || navigator.maxTouchPoints > 0) {
+    document.body.classList.add('show-controls');
+  }
 
   const T = window.TEXT || {};
   const CFG = window.CONFIG || {};
-
   hintEl.textContent = T.hint || "";
   sumTitle.textContent = T.end_title || "Финиш!";
   restartBtn.textContent = T.restart_btn || "🔄 Ещё раз";
@@ -36,8 +43,8 @@
   const SPEED = CFG.playerSpeed ?? 3.2;
   const R_PLAYER = CFG.playerRadius ?? 10;
 
-  const BASE_COLS = CFG.baseCols ?? 15;
-  const BASE_ROWS = CFG.baseRows ?? 11;
+  const BASE_COLS = CFG.baseCols ?? 8;
+  const BASE_ROWS = CFG.baseRows ?? 6;
   const SCALE = CFG.levelScale ?? 1.4;
 
   const ARROW_STEP = CFG.arrowStep ?? 3;
@@ -53,13 +60,17 @@
 
   // ---------- Состояние ----------
   let level = 1;
+  let loopTicking = false;
   let running = true;
   let startTime = performance.now();
   let caught = false;
 
-  // мир/камера
+  // мир
   let WORLD_W = c.width, WORLD_H = c.height;
   let camX = 0, camY = 0;
+
+  // рендер-скейл, чтобы всё влезало
+  let RENDER_S = 1, RENDER_OX = 0, RENDER_OY = 0;
 
   // сетка-лабиринт
   let maze = null;   // {walls,w,h,cell}
@@ -73,13 +84,17 @@
   // собака
   const dog = { x: 0, y: 0, r: 10, path: [], next: 1, recalcAt: 0, speed: DOG_SPEEDS[1], tier: 2 };
 
-  // стрелки
-  let arrows = [];
+  // стрелки-навигация
+  const arrows = [];
   let navRecalcAt = 0;
+  let showArrows = true;
 
   // ---------- Ввод ----------
   const keys = {up:false,down:false,left:false,right:false};
   addEventListener('keydown', e=>{
+    if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space'].includes(e.code)) {
+      e.preventDefault();
+    }    
     if(e.code==='ArrowUp'||e.code==='KeyW') keys.up=true;
     if(e.code==='ArrowDown'||e.code==='KeyS') keys.down=true;
     if(e.code==='ArrowLeft'||e.code==='KeyA') keys.left=true;
@@ -91,6 +106,7 @@
     if(e.code==='KeyR') startLevel(level, true);
     if(e.code==='KeyM') startLevel(1, true);
     if(e.key==='?' || e.code==='Slash') openNav();
+    if(e.code==='KeyN') toggleArrows();
   });
   addEventListener('keyup', e=>{
     if(e.code==='ArrowUp'||e.code==='KeyW') keys.up=false;
@@ -99,10 +115,13 @@
     if(e.code==='ArrowRight'||e.code==='KeyD') keys.right=false;
   });
   restartBtn.addEventListener('click', ()=>startLevel(1, true));
+// перезапуск на кнопку в модалке "Финиш"
 
   function openNav(){ navEl.classList.remove('hidden'); }
   openNavBtn.addEventListener('click', openNav);
   if (closeNavBtn) closeNavBtn.addEventListener('click', ()=>navEl.classList.add('hidden'));
+  toggleArrowsBtn.addEventListener('click', toggleArrows);
+  function toggleArrows(){ showArrows=!showArrows; }
 
   // touch controls
   function hold(btn, on, off){
@@ -119,6 +138,9 @@
   hold(btnLeft, ()=>keys.left=true, ()=>keys.left=false);
   hold(btnRight, ()=>keys.right=true, ()=>keys.right=false);
   if(btnJump) btnJump.addEventListener('pointerdown', (e)=>{ e.preventDefault(); tryJump(); });
+  if(btnInfo) btnInfo.addEventListener('click', openNav);
+  if(btnCompass) btnCompass.addEventListener('click', toggleArrows);
+  if(btnRestart) btnRestart.addEventListener('click', ()=>startLevel(level, true));
 
   function setDogTier(tier){
     dog.tier = tier;
@@ -134,7 +156,10 @@
   // ---------- Утилиты ----------
   const clamp = (v,a,b)=> Math.max(a, Math.min(b, v));
   const dist = (x1,y1,x2,y2)=> Math.hypot(x1-x2, y1-y2);
-  const cellSize = ()=> TILE/2;
+
+  // ячейка = TILE (коридор 32px)
+  const cellSize = ()=> TILE;
+
   const toWorld = (cx,cy)=> ({ x: cx*cellSize(), y: cy*cellSize() });
   const toCellIdx = (x,y)=> ({ x: clamp(Math.floor(x/cellSize()), 0, maze.w-1),
                                y: clamp(Math.floor(y/cellSize()), 0, maze.h-1) });
@@ -143,10 +168,7 @@
     const y = (idx.y%2 ? idx.y : clamp(idx.y-1, 1, maze.h-2));
     return {x,y};
   }
-  function updateCamera(){
-    camX = clamp(player.x - c.width/2, 0, Math.max(0, WORLD_W - c.width));
-    camY = clamp(player.y - c.height/2, 0, Math.max(0, WORLD_H - c.height));
-  }
+  function updateCamera(){ camX=0; camY=0; } // камера больше не нужна: показываем весь мир
 
   // ---------- Генерация ----------
   function genMaze(cols, rows){
@@ -197,8 +219,6 @@
   }
 
   // ---------- Навигация ----------
-  let arrows = [];
-  let navRecalcAt = 0;
   function buildArrowsFromPlayer(){
     const pRoom = snapToRoom(toCellIdx(player.x, player.y));
     const route = pathCells(pRoom, exitCell);
@@ -220,7 +240,7 @@
     }
   }
   function drawArrow(ar){
-    if(ar.alpha <= 0.02) return;
+    if(!showArrows || ar.alpha <= 0.02) return;
     ctx.save(); ctx.globalAlpha = ar.alpha; ctx.translate(ar.x - camX, ar.y - camY); ctx.rotate(ar.ang);
     const w = 26, h = 16;
     ctx.fillStyle='rgba(0,0,0,.18)'; ctx.beginPath(); ctx.ellipse(-2, h*0.6, w*0.6, 4, 0, 0, Math.PI*2); ctx.fill();
@@ -272,7 +292,7 @@
     ctx.beginPath(); ctx.moveTo(drawX-12, drawY+2); ctx.quadraticCurveTo(drawX-20, drawY, drawX-16, drawY+10); ctx.stroke();
   }
 
-  // ---------- Прыжок ----------
+  // ---------- Прыжок через стену ----------
   function tryJump(){
     if(!maze) return;
     const now = performance.now();
@@ -301,6 +321,7 @@
     }
   }
 
+  // ---------- Вспышки ----------
   const flashes = []; // {x,y,life}
   function flashAt(x,y){ flashes.push({x,y,life:320}); }
   function updateFlashes(dt){
@@ -318,47 +339,61 @@
     }
   }
 
-  // ---------- Коллизии ----------
-  function collideMaze(px, py, r){
-    const cell = maze.cell;
-    const minX = Math.floor((px - r)/cell);
-    const maxX = Math.floor((px + r)/cell);
-    const minY = Math.floor((py - r)/cell);
-    const maxY = Math.floor((py + r)/cell);
-    let x = px, y = py;
+  // ---------- Коллизии: ось-за-осью ----------
+  function resolveX(px, py, vx, r){
+    let x = px + vx;
+    const cs = maze.cell;
+    const minX = Math.floor((Math.min(px, x) - r)/cs)-1;
+    const maxX = Math.floor((Math.max(px, x) + r)/cs)+1;
+    const minY = Math.floor((py - r)/cs)-1;
+    const maxY = Math.floor((py + r)/cs)+1;
 
     for(let cy=minY; cy<=maxY; cy++){
       for(let cx=minX; cx<=maxX; cx++){
         if(cy<0||cx<0||cy>=maze.h||cx>=maze.w) continue;
-        if(maze.walls[cy][cx]===1){
-          const wx = cx*cell, wy = cy*cell, ww = cell, wh = cell;
-          const nx = clamp(x, wx, wx+ww), ny = clamp(y, wy, wy+rh(wh=cell));
-          // small helper to avoid style error
-        }
+        if(maze.walls[cy][cx]!==1) continue;
+        const rx=cx*cs, ry=cy*cs, rw=cs, rh=cs;
+        const above = py + r <= ry;
+        const below = py - r >= ry+rh;
+        if(above || below) continue;
+        if(vx>0 && (px + r <= rx) && (x + r > rx)) x = rx - r;
+        else if(vx<0 && (px - r >= rx+rw) && (x - r < rx+rw)) x = rx + rw + r;
       }
     }
-    // re-implement cleanly (avoid above mistake)
-    x = px; y = py;
+    return clamp(x, r, WORLD_W - r);
+  }
+  function resolveY(px, py, vy, r){
+    let y = py + vy;
+    const cs = maze.cell;
+    const minX = Math.floor((px - r)/cs)-1;
+    const maxX = Math.floor((px + r)/cs)+1;
+    const minY = Math.floor((Math.min(py, y) - r)/cs)-1;
+    const maxY = Math.floor((Math.max(py, y) + r)/cs)+1;
+
     for(let cy=minY; cy<=maxY; cy++){
       for(let cx=minX; cx<=maxX; cx++){
         if(cy<0||cx<0||cy>=maze.h||cx>=maze.w) continue;
         if(maze.walls[cy][cx]!==1) continue;
-        const rx = cx*cell, ry = cy*cell, rw = cell, rh = cell;
-        const cxn = clamp(x, rx, rx+rw);
-        const cyn = clamp(y, ry, ry+rh);
-        const dd = Math.hypot(x-cxn, y-cyn);
-        if(dd < r){
-          const ang = Math.atan2(y - cyn, x - cxn) || 0;
-          x = cxn + Math.cos(ang) * (r + 0.1);
-          y = cyn + Math.sin(ang) * (r + 0.1);
-        }
+        const rx=cx*cs, ry=cy*cs, rw=cs, rh=cs;
+        const left = px + r <= rx;
+        const right = px - r >= rx+rw;
+        if(left || right) continue;
+        if(vy>0 && (py + r <= ry) && (y + r > ry)) y = ry - r;
+        else if(vy<0 && (py - r >= ry+rh) && (y - r < ry+rh)) y = ry + rh + r;
       }
     }
-    // края мира
-    x = clamp(x, r, WORLD_W - r);
-    y = clamp(y, r, WORLD_H - r);
-    return {x,y};
+    return clamp(y, r, WORLD_H - r);
   }
+
+  // ---------- Масштабирование рендера (всё помещается) ----------
+  function computeRenderScale(){
+    // размер мира в пикселях canvas-координатах
+    const w = WORLD_W, h = WORLD_H;
+    RENDER_S = Math.min(c.width / w, c.height / h);
+    RENDER_OX = (c.width  - w * RENDER_S) / 2;
+    RENDER_OY = (c.height - h * RENDER_S) / 2;
+  }
+  window.addEventListener('resize', computeRenderScale);
 
   // ---------- Запуск уровня ----------
   function startLevel(lvl, hard=false){
@@ -367,34 +402,35 @@
     if(hard) startTime = performance.now();
     caught = false;
 
-    // размеры увеличиваются ×1.4^(level-1)
     const cols = Math.max(5, Math.round(BASE_COLS * Math.pow(SCALE, level-1)));
     const rows = Math.max(5, Math.round(BASE_ROWS * Math.pow(SCALE, level-1)));
     maze = genMaze(cols, rows);
 
     WORLD_W = maze.w * maze.cell;
     WORLD_H = maze.h * maze.cell;
+    computeRenderScale();
 
-    // старт/финиш
     player.x = maze.cell * 1.5; player.y = maze.cell * 1.5;
 
     exitCell = { x: maze.w-2, y: maze.h-2 };
     const ex = toWorld(exitCell.x+0.5, exitCell.y+0.5);
     dog.x = ex.x; dog.y = ex.y; dog.recalcAt = 0;
 
-    // навигация
     arrows.length = 0; navRecalcAt = 0;
 
     sumEl.classList.add('hidden');
     running = true;
+if (!loopTicking) { loopTicking = true; requestAnimationFrame(loop); }
+
+    
 
     updateCamera();
   }
 
   // ---------- Обновление ----------
-  let last = performance.now();
+  let lastTime = performance.now();
   function update(t){
-    const dt = Math.min(33, t-last); last=t;
+    const dt = Math.min(33, t-lastTime); lastTime=t;
     if(!running) return;
 
     let dx = (keys.right?1:0) - (keys.left?1:0);
@@ -404,29 +440,23 @@
       else { lastDir.x = 0; lastDir.y = Math.sign(dy); }
     }
 
-    // движение игрока в мире
     const len = Math.hypot(dx,dy) || 1;
-    player.vx = (dx/len) * SPEED;
-    player.vy = (dy/len) * SPEED;
+    const vx = (dx/len) * SPEED;
+    const vy = (dy/len) * SPEED;
 
-    let nx = player.x + player.vx;
-    let ny = player.y + player.vy;
-    const after = collideMaze(nx, ny, player.r);
-    player.x = after.x; player.y = after.y;
+    const nx = resolveX(player.x, player.y, vx, player.r);
+    const ny = resolveY(nx, player.y, vy, player.r);
+    player.x = nx; player.y = ny;
 
-    // собака
     updateDog(dt);
 
-    // навигация
     if(performance.now() >= navRecalcAt){
       buildArrowsFromPlayer();
       navRecalcAt = performance.now() + NAV_RECALC_MS;
     }
     updateArrows(dt);
-
     updateFlashes(dt);
 
-    // финиш → следующий уровень
     const ex = toWorld(exitCell.x+0.5, exitCell.y+0.5);
     if(dist(player.x, player.y, ex.x, ex.y) < TILE*0.6){
       startLevel(level+1);
@@ -445,9 +475,14 @@
     sky.addColorStop(0,'#eaf3ff'); sky.addColorStop(1,'#eef6ff');
     ctx.fillStyle=sky; ctx.fillRect(0,0,c.width,c.height);
 
+    // МАСШТАБИРУЕМ ВЕСЬ МИР, чтобы он целиком влезал в canvas
+    ctx.save();
+    ctx.translate(RENDER_OX, RENDER_OY);
+    ctx.scale(RENDER_S, RENDER_S);
+
     drawMaze();
 
-    // выходной маркер (в мировых координатах)
+    // выход
     const ex = toWorld(exitCell.x, exitCell.y);
     ctx.fillStyle='#6ee7b7';
     ctx.fillRect(ex.x - camX + 4, ex.y - camY + 4, TILE-8, TILE-8);
@@ -457,19 +492,15 @@
     drawDog();
     drawPlayer();
     drawFlashes();
+
+    ctx.restore(); // UI/фон без масштабирования
   }
 
   function drawMaze(){
     const m = maze, cell = m.cell;
-
-    // рисуем только видимую область
-    const sx = Math.max(0, Math.floor(camX / cell) - 1);
-    const sy = Math.max(0, Math.floor(camY / cell) - 1);
-    const ex = Math.min(m.w-1, Math.ceil((camX + c.width) / cell) + 1);
-    const ey = Math.min(m.h-1, Math.ceil((camY + c.height) / cell) + 1);
-
-    for(let y=sy;y<=ey;y++){
-      for(let x=sx;x<=ex;x++){
+    // Рисуем весь мир (он небольшой, плюс масштаб всё равно вписывает)
+    for(let y=0;y<m.h;y++){
+      for(let x=0;x<m.w;x++){
         if(m.walls[y][x]===1){
           const px = x*cell - camX, py = y*cell - camY;
           ctx.fillStyle='#eae7ff'; ctx.fillRect(px,py,cell,cell);
@@ -488,7 +519,6 @@
     ctx.fillStyle='#0b1020'; ctx.beginPath(); ctx.arc(drawX+3, drawY-2, 2, 0, Math.PI*2); ctx.fill();
   }
 
-  // ---------- Финиш ----------
   function finish(){
     running=false;
     const time = (performance.now()-startTime)/1000;
@@ -496,15 +526,17 @@
     sumEl.classList.remove('hidden');
   }
 
-  // ---------- Цикл ----------
-  let last = performance.now();
   function loop(t){
     update(t);
     render();
-    if(running) requestAnimationFrame(loop);
+    if (running) {
+      requestAnimationFrame(loop);
+    } else {
+      loopTicking = false;
+    }
   }
+  
 
-  // старт
   startLevel(1, true);
   requestAnimationFrame(loop);
 })();
